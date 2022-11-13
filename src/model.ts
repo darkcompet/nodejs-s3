@@ -6,6 +6,8 @@ export interface Config {
 }
 
 export interface UploadFileResult {
+	result: AWS.S3.PutObjectOutput | null;
+	error: AWS.AWSError | null
 }
 
 export interface DownloadFileResult {

@@ -31,7 +31,7 @@ export class DkS3 {
 	 * @param bucketName Target root folder, for eg,. isky
 	 * @param objectPrefix Prefix of object path, for eg,. wm/test
 	 */
-	async ListObjects(bucketName: string, objectPrefix: string) {
+	async ListObjectsAsync(bucketName: string, objectPrefix: string) {
 		const params_list = {
 			Bucket: bucketName,
 			Prefix: objectPrefix,
@@ -51,28 +51,35 @@ export class DkS3 {
 	 * @param clientFilePath Src file path at local client. For eg,. ./mydata/upload/clip.mp4
 	 * @param s3RelativeFilePath Dst remote relative file path. For eg,. upload/today/movie.mp4
 	 */
-	async UploadFile(
+	async UploadFileAsync(
 		bucketName: string,
 		clientFilePath: string,
 		s3RelativeFilePath: string
-	): Promise<Model.UploadFileResult | boolean> {
-		// File must exist
-		if (!(await DkUnixShell.FileExisted(clientFilePath))) {
-			return false;
+	): Promise<Model.UploadFileResult> {
+		try {
+			// File must exist
+			if (!(await DkUnixShell.FileExisted(clientFilePath))) {
+				throw new Error("File not exist");
+			}
+
+			const fileBuffer = await fs_promise.readFile(clientFilePath);
+			const uploadParams = {
+				Bucket: bucketName,
+				Key: s3RelativeFilePath,
+				Body: fileBuffer
+			};
+
+			return {
+				result: await this.s3.putObject(uploadParams).promise(),
+				error: null
+			};
 		}
-
-		const fileBuffer = await fs_promise.readFile(clientFilePath);
-		const uploadParams = {
-			Bucket: bucketName,
-			Key: s3RelativeFilePath,
-			Body: fileBuffer
-		};
-
-		// Upload single file
-		const uploadResult = await this.s3.putObject(uploadParams).promise();
-		console.log("uploadResult: " + JSON.stringify(uploadResult));
-
-		return uploadResult;
+		catch (e: any) {
+			return {
+				result: null,
+				error: e
+			};
+		}
 	}
 
 	/**
@@ -82,42 +89,34 @@ export class DkS3 {
 	 * @param fromLocalFolderPath From local folder of client. For eg,. ./mydata/upload
 	 * @param toS3RelativeFolderPath To s3 relative object path. For eg,. upload/today
 	 */
-	async UploadFolder(
+	async UploadFolderAsync(
 		bucketName: string,
 		fromLocalFolderPath: string,
-		toS3RelativeFolderPath: string
-	): Promise<Model.UploadFileResult> {
+		toS3RelativeFolderPath: string,
+		eachFileCallback: (error: AWS.AWSError, data: AWS.S3.PutObjectOutput) => {}
+	) {
 		// Get of list of files from 'dist' directory
 		const fileNames = await fs_promise.readdir(fromLocalFolderPath);
 		if (!fileNames || fileNames.length === 0) {
 			console.log(`Aborted. Folder '${fromLocalFolderPath}' is empty or does not exist.`);
-			return {};
+			return;
 		}
 		if (fileNames.length > 10000) {
 			console.error(`Aborted. It is recommended to upload under 10k files since S3 time-diff is only 15 minutes`);
-			return {};
+			return;
 		}
 
 		// Upload each file
-		let progress = 0;
-		let totalFileCount = fileNames.length;
 		for (const fileName of fileNames) {
 			const filePath = path.join(fromLocalFolderPath, fileName);
 
-			// Ignore folder, non-png
+			// Ignore folder
 			if (await DkUnixShell.DirectoryExisted(filePath)) {
-				--totalFileCount;
-				continue;
-			}
-			if (!fileName.endsWith(".png")) {
-				--totalFileCount;
 				continue;
 			}
 
 			// Async put to s3
-			const failedFilePaths: any[] = [];
 			const fileBuffer = await fs_promise.readFile(filePath);
-
 			const params_upload = {
 				Bucket: bucketName,
 				Key: `${toS3RelativeFolderPath}/${fileName}`,
@@ -125,29 +124,8 @@ export class DkS3 {
 			};
 
 			// Upload multiple files by use callback instead of await
-			this.s3.putObject(params_upload, (err, data) => {
-				++progress;
-
-				if (err) {
-					failedFilePaths.push(filePath);
-					console.error(`[${progress}/${totalFileCount}] Could NOT upload ${fileName}, error: ${JSON.stringify(err)}`);
-				}
-				else {
-					console.log(`[${progress}/${totalFileCount}] Uploaded ${fileName}`);
-				}
-
-				if (progress == totalFileCount) {
-					if (failedFilePaths.length > 0) {
-						console.error("Failed file paths: " + failedFilePaths.join(", "));
-					}
-					else {
-						console.log(`Uploaded ${totalFileCount} files successfully !`);
-					}
-				}
-			});
+			this.s3.putObject(params_upload, eachFileCallback);
 		}
-
-		return {};
 	}
 
 	/**
@@ -156,7 +134,7 @@ export class DkS3 {
 	 * @param bucketName Target root folder, for eg,. isky
 	 * @param objectPrefix Prefix of object path, for eg,. wm/test
 	 */
-	async DownloadObjects(bucketName: string, out_dirPath: string, objectPrefix: string) {
+	async DownloadObjectsAsync(bucketName: string, out_dirPath: string, objectPrefix: string) {
 		const params: ListObjectsV2Request = {
 			Bucket: bucketName,
 			Prefix: objectPrefix,
@@ -187,7 +165,7 @@ export class DkS3 {
 	 * @param bucketName Target root folder, for eg,. isky
 	 * @param objectPrefix Prefix of object path, for eg,. wm/test
 	 */
-	async DeleteObject(bucketName: string, objectPrefix: string) {
+	async DeleteObjectAsync(bucketName: string, objectPrefix: string) {
 		const params_list = {
 			Bucket: bucketName,
 			Prefix: objectPrefix,
@@ -220,7 +198,7 @@ export class DkS3 {
 		// If has more files, continue to delete
 		if (listResult.IsTruncated) {
 			console.log("Recursively delete remaining files...");
-			await this.DeleteObject(bucketName, objectPrefix);
+			await this.DeleteObjectAsync(bucketName, objectPrefix);
 		}
 	}
 }
