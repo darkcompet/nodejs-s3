@@ -31,21 +31,29 @@ export class DkS3 {
 	 * @param bucketName Target root folder, for eg,. isky
 	 * @param objectPrefix Prefix of object path, for eg,. wm/test
 	 */
-	async ListObjectsAsync(bucketName: string, objectPrefix: string) {
+	async ListObjectsAsync(bucketName: string, objectPrefix: string): Promise<Model.ListObjectResult> {
 		const params_list = {
 			Bucket: bucketName,
 			Prefix: objectPrefix,
 		};
 
-		const result = await this.s3.listObjectsV2(params_list).promise();
-
-		result.Contents?.forEach((content) => {
-			console.log("File name: " + content.Key);
-		});
+		try {
+			return {
+				data: await this.s3.listObjectsV2(params_list).promise(),
+				err: null
+			};
+			// result.Contents?.forEach((content) => {
+			// 	console.log("File name: " + content.Key);
+			// });
+		}
+		catch (e: any) {
+			return { data: null, err: e };
+		}
 	}
 
 	/**
 	 * Upload client file to s3.
+	 * This is complex process which handles arbitrary file size, retry count,... for us.
 	 *
 	 * @param bucketName Target root folder of s3. For eg,. staging
 	 * @param clientFilePath Src file path at local client. For eg,. ./mydata/upload/clip.mp4
@@ -70,26 +78,59 @@ export class DkS3 {
 			};
 
 			return {
-				result: await this.s3.putObject(uploadParams).promise(),
-				error: null
+				data: await this.s3.upload(uploadParams).promise(),
+				err: null
 			};
 		}
 		catch (e: any) {
-			return {
-				result: null,
-				error: e
-			};
+			return { data: null, err: e };
 		}
 	}
 
 	/**
-	 * Upload given folder to s3.
+	 * Upload client file to s3.
+	 * In general, we use it when put small object.
+	 *
+	 * @param bucketName Target root folder of s3. For eg,. staging
+	 * @param clientFilePath Src file path at local client. For eg,. ./mydata/upload/clip.mp4
+	 * @param s3RelativeFilePath Dst remote relative file path. For eg,. upload/today/movie.mp4
+	 */
+	async PutFileAsync(
+		bucketName: string,
+		clientFilePath: string,
+		s3RelativeFilePath: string
+	): Promise<Model.PutFileResult> {
+		try {
+			// File must exist
+			if (!(await DkUnixShell.FileExisted(clientFilePath))) {
+				throw new Error("File not exist");
+			}
+
+			const fileBuffer = await fs_promise.readFile(clientFilePath);
+			const uploadParams = {
+				Bucket: bucketName,
+				Key: s3RelativeFilePath,
+				Body: fileBuffer
+			};
+
+			return {
+				data: await this.s3.putObject(uploadParams).promise(),
+				err: null
+			};
+		}
+		catch (e: any) {
+			return { data: null, err: e };
+		}
+	}
+
+	/**
+	 * Put given folder to s3.
 	 *
 	 * @param bucketName Target root folder of s3. For eg,. staging
 	 * @param fromLocalFolderPath From local folder of client. For eg,. ./mydata/upload
 	 * @param toS3RelativeFolderPath To s3 relative object path. For eg,. upload/today
 	 */
-	async UploadFolderAsync(
+	async PutFolderAsync(
 		bucketName: string,
 		fromLocalFolderPath: string,
 		toS3RelativeFolderPath: string,
