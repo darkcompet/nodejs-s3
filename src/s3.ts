@@ -11,11 +11,8 @@ import * as Model from "./model";
 
 export class DkS3 {
 	private readonly s3: AWS.S3;
-	private readonly config: Model.Config;
 
 	constructor(config: Model.Config) {
-		this.config = config;
-
 		// Config S3
 		AWS.config.update({
 			accessKeyId: config.ACCESS_KEY,
@@ -48,12 +45,48 @@ export class DkS3 {
 	}
 
 	/**
-	 * Upload a folder to s3.
+	 * Upload client file to s3.
 	 *
-	 * @param bucketName Target root folder, for eg,. isky
-	 * @param objectPrefix Prefix of object path, for eg,. wm/test
+	 * @param bucketName Target root folder of s3. For eg,. staging
+	 * @param clientFilePath Src file path at local client. For eg,. ./mydata/upload/clip.mp4
+	 * @param s3RelativeFilePath Dst remote relative file path. For eg,. upload/today/movie.mp4
 	 */
-	async UploadFolder(buckerName: string, fromLocalFolderPath: string, toS3RelativeFolderPath: string): Promise<Model.UploadFileResult> {
+	async UploadFile(
+		bucketName: string,
+		clientFilePath: string,
+		s3RelativeFilePath: string
+	): Promise<Model.UploadFileResult | boolean> {
+		// File must exist
+		if (!(await DkUnixShell.FileExisted(clientFilePath))) {
+			return false;
+		}
+
+		const fileBuffer = await fs_promise.readFile(clientFilePath);
+		const uploadParams = {
+			Bucket: bucketName,
+			Key: s3RelativeFilePath,
+			Body: fileBuffer
+		};
+
+		// Upload single file
+		const uploadResult = await this.s3.putObject(uploadParams).promise();
+		console.log("uploadResult: " + JSON.stringify(uploadResult));
+
+		return uploadResult;
+	}
+
+	/**
+	 * Upload given folder to s3.
+	 *
+	 * @param bucketName Target root folder of s3. For eg,. staging
+	 * @param fromLocalFolderPath From local folder of client. For eg,. ./mydata/upload
+	 * @param toS3RelativeFolderPath To s3 relative object path. For eg,. upload/today
+	 */
+	async UploadFolder(
+		bucketName: string,
+		fromLocalFolderPath: string,
+		toS3RelativeFolderPath: string
+	): Promise<Model.UploadFileResult> {
 		// Get of list of files from 'dist' directory
 		const fileNames = await fs_promise.readdir(fromLocalFolderPath);
 		if (!fileNames || fileNames.length === 0) {
@@ -86,12 +119,12 @@ export class DkS3 {
 			const fileBuffer = await fs_promise.readFile(filePath);
 
 			const params_upload = {
-				Bucket: buckerName,
+				Bucket: bucketName,
 				Key: `${toS3RelativeFolderPath}/${fileName}`,
 				Body: fileBuffer
 			};
 
-			// Start upload async
+			// Upload multiple files by use callback instead of await
 			this.s3.putObject(params_upload, (err, data) => {
 				++progress;
 
@@ -112,10 +145,6 @@ export class DkS3 {
 					}
 				}
 			});
-
-			// For continuous upload:
-			// const uploadResult = await s3.putObject(uploadParams).promise();
-			// console.log("uploadResult: " + JSON.stringify(uploadResult));
 		}
 
 		return {};
