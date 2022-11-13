@@ -58,11 +58,13 @@ export class DkS3 {
 	 * @param bucketName Target root folder of s3. For eg,. staging
 	 * @param clientFilePath Src file path at local client. For eg,. ./mydata/upload/clip.mp4
 	 * @param s3RelativeFilePath Dst remote relative file path. For eg,. upload/today/movie.mp4
+	 * @param ACL See ObjectCannedACL = "private"|"public-read"|"public-read-write"|"authenticated-read"|"aws-exec-read"|"bucket-owner-read"|"bucket-owner-full-control"|string;
 	 */
 	async UploadFileAsync(
 		bucketName: string,
 		clientFilePath: string,
-		s3RelativeFilePath: string
+		s3RelativeFilePath: string,
+		ACL: string | null = null
 	): Promise<Model.UploadFileResult> {
 		try {
 			// File must exist
@@ -71,11 +73,15 @@ export class DkS3 {
 			}
 
 			const fileBuffer = await fs_promise.readFile(clientFilePath);
-			const uploadParams = {
+			const uploadParams: any = {
 				Bucket: bucketName,
 				Key: s3RelativeFilePath,
-				Body: fileBuffer
+				Body: fileBuffer,
 			};
+
+			if (ACL) {
+				uploadParams.ACL = ACL;
+			}
 
 			return {
 				data: await this.s3.upload(uploadParams).promise(),
@@ -94,11 +100,13 @@ export class DkS3 {
 	 * @param bucketName Target root folder of s3. For eg,. staging
 	 * @param clientFilePath Src file path at local client. For eg,. ./mydata/upload/clip.mp4
 	 * @param s3RelativeFilePath Dst remote relative file path. For eg,. upload/today/movie.mp4
+	 * @param ACL See ObjectCannedACL = "private"|"public-read"|"public-read-write"|"authenticated-read"|"aws-exec-read"|"bucket-owner-read"|"bucket-owner-full-control"|string;
 	 */
 	async PutFileAsync(
 		bucketName: string,
 		clientFilePath: string,
-		s3RelativeFilePath: string
+		s3RelativeFilePath: string,
+		ACL: string | null = null
 	): Promise<Model.PutFileResult> {
 		try {
 			// File must exist
@@ -107,11 +115,15 @@ export class DkS3 {
 			}
 
 			const fileBuffer = await fs_promise.readFile(clientFilePath);
-			const uploadParams = {
+			const uploadParams: any = {
 				Bucket: bucketName,
 				Key: s3RelativeFilePath,
 				Body: fileBuffer
 			};
+
+			if (ACL) {
+				uploadParams.ACL = ACL;
+			}
 
 			return {
 				data: await this.s3.putObject(uploadParams).promise(),
@@ -158,14 +170,14 @@ export class DkS3 {
 
 			// Async put to s3
 			const fileBuffer = await fs_promise.readFile(filePath);
-			const params_upload = {
+			const uploadParams = {
 				Bucket: bucketName,
 				Key: `${toS3RelativeFolderPath}/${fileName}`,
 				Body: fileBuffer
 			};
 
 			// Upload multiple files by use callback instead of await
-			this.s3.putObject(params_upload, eachFileCallback);
+			this.s3.putObject(uploadParams, eachFileCallback);
 		}
 	}
 
