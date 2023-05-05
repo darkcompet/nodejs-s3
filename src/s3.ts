@@ -5,7 +5,7 @@ import fs from "fs";
 import fs_promise from "fs/promises";
 import path from "path";
 
-import { DkFiles, DkUnixShell } from "@darkcompet/nodejs-core";
+import { DkFiles } from "@darkcompet/nodejs-core";
 
 import * as Model from "./model";
 
@@ -68,7 +68,7 @@ export class DkS3 {
 	): Promise<Model.UploadFileResult> {
 		try {
 			// File must exist
-			if (!(await DkUnixShell.FileExisted(clientFilePath))) {
+			if (!(await DkFiles.ExistsAsync(clientFilePath))) {
 				throw new Error("File not exist");
 			}
 
@@ -110,7 +110,7 @@ export class DkS3 {
 	): Promise<Model.PutFileResult> {
 		try {
 			// File must exist
-			if (!(await DkUnixShell.FileExisted(clientFilePath))) {
+			if (!(await DkFiles.ExistsAsync(clientFilePath))) {
 				throw new Error("File not exist");
 			}
 
@@ -164,7 +164,7 @@ export class DkS3 {
 			const filePath = path.join(fromLocalFolderPath, fileName);
 
 			// Ignore folder
-			if (await DkUnixShell.DirectoryExisted(filePath)) {
+			if (await DkFiles.IsDirectory(filePath)) {
 				continue;
 			}
 
